@@ -25,25 +25,38 @@ def create_lags(series, lags, name="x"):
 
 class Model:
     """
-    All model objects used for WalkForwardAnalysis must have these methods
+    All model objects used for TimeSeriesCrossVal must have these methods
     """
 
     @abstractmethod
-    def fit(self, train_indep_var, train_dep_var):
+    def fit(self, train_x, train_y):
         """
         Fit model using training data.
         """
         pass
 
     @abstractmethod
-    def loss(self, test_indep_var, test_dep_var):
+    def loss(self, test_x, test_y):
         """
         Return object containing loss metrics using testing data.
         """
         pass
 
 
-class WalkForwardAnalysis:
+class BayesModel:
+    """
+    All model objects used for BayesTimeSeriesCrossVal must have these methods
+    """
+
+    @abstractmethod
+    def fit(self, train_x, train_y, test_x, test_y):
+        """
+        Fit model using training data.
+        """
+        pass
+
+
+class TimeSeriesCrossVal:
     """
     Conducts walk forward testing for time series models.
     Splits dataset into 'splits' number of parts.
@@ -52,13 +65,13 @@ class WalkForwardAnalysis:
     min_samples: minimum number of samples to include for training in the first split
     """
 
-    def __init__(self, indep_var, dep_var, model, splits=10, min_samples=52):
-        if len(indep_var) != len(dep_var):
+    def __init__(self, x, y, model, splits=10, min_samples=52):
+        if len(x) != len(y):
             raise ValueError(
                 "Independent variable and dependent variable must have same length"
             )
-        self.indep_var = indep_var
-        self.dep_var = dep_var
+        self.x = x
+        self.y = y
         self.model = model
         self.splits = splits
         self.min_samples = min_samples
@@ -67,7 +80,7 @@ class WalkForwardAnalysis:
         """
         Generates indexing numbers for training and testing data
         """
-        split_length = (len(self.indep_var) - self.min_samples) // self.splits
+        split_length = (len(self.x) - self.min_samples) // self.splits
         for t in range(self.splits - 1):
             if t == 0:
                 train_index = self.min_samples
@@ -76,7 +89,7 @@ class WalkForwardAnalysis:
             # When we're on the last test split, use entire rest of dataset.
             # This fixes rounding issues between number of splits and length of dataset.
             if t == (self.splits - 2):
-                test_index = len(self.indep_var)
+                test_index = len(self.x)
             else:
                 test_index = train_index + split_length
             yield t, train_index, test_index
@@ -88,12 +101,67 @@ class WalkForwardAnalysis:
         """
         results = []
         for t, train_index, test_index in self.index_gen():
-            train_indep_var = self.indep_var.iloc[:train_index]
-            train_dep_var = self.dep_var.iloc[:train_index]
-            self.model.fit(train_indep_var, train_dep_var)
+            train_x = self.x.iloc[:train_index]
+            train_y = self.y.iloc[:train_index]
+            self.model.fit(train_x, train_y)
 
-            test_indep_var = self.indep_var.iloc[train_index:test_index]
-            test_dep_var = self.dep_var.iloc[train_index:test_index]
-            results.append(self.model.loss(test_indep_var, test_dep_var))
+            test_x = self.x.iloc[train_index:test_index]
+            test_y = self.y.iloc[train_index:test_index]
+            results.append(self.model.loss(test_x, test_y))
+            print(f"Split {t} complete.")
+        return results
+
+
+class BayesTimeSeriesCrossVal:
+    """
+    Conducts walk forward testing for time series models in Stan.
+    Splits dataset into 'splits' number of parts.
+    Train data is an expanding window.
+    splits: number of splits to use for cross validation
+    min_samples: minimum number of samples to include for training in the first split
+    """
+
+    def __init__(self, x, y, model, splits=10, min_samples=52):
+        if len(x) != len(y):
+            raise ValueError(
+                "Independent variable and dependent variable must have same length"
+            )
+        self.x = x
+        self.y = y
+        self.model = model
+        self.splits = splits
+        self.min_samples = min_samples
+
+    def index_gen(self):
+        """
+        Generates indexing numbers for training and testing data
+        """
+        split_length = (len(self.x) - self.min_samples) // self.splits
+        for t in range(self.splits - 1):
+            if t == 0:
+                train_index = self.min_samples
+            else:
+                train_index = self.min_samples + (split_length * t)
+            # When we're on the last test split, use entire rest of dataset.
+            # This fixes rounding issues between number of splits and length of dataset.
+            if t == (self.splits - 2):
+                test_index = len(self.x)
+            else:
+                test_index = train_index + split_length
+            yield t, train_index, test_index
+
+    def walk_forward_test(self):
+        """
+        Conducts walk forward test.
+        Returns: list of objects returned from model's 'loss' function
+        """
+        results = []
+        for t, train_index, test_index in self.index_gen():
+            train_x = self.x.iloc[:train_index]
+            train_y = self.y.iloc[:train_index]
+            test_x = self.x.iloc[train_index:test_index]
+            test_y = self.y.iloc[train_index:test_index]
+            model_results = self.model.fit(train_x, train_y, test_x, test_y)
+            results.append(model_results)
             print(f"Split {t} complete.")
         return results
