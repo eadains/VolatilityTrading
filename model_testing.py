@@ -137,14 +137,14 @@ class BayesTimeSeriesCrossVal:
         Generates indexing numbers for training and testing data
         """
         split_length = (len(self.x) - self.min_samples) // self.splits
-        for t in range(self.splits - 1):
+        for t in range(self.splits):
             if t == 0:
                 train_index = self.min_samples
             else:
                 train_index = self.min_samples + (split_length * t)
             # When we're on the last test split, use entire rest of dataset.
             # This fixes rounding issues between number of splits and length of dataset.
-            if t == (self.splits - 2):
+            if t == (self.splits - 1):
                 test_index = len(self.x)
             else:
                 test_index = train_index + split_length
