@@ -148,7 +148,7 @@ def exceedances(arviz_data):
     actual = {}
     for p in percentiles:
         percent = np.sum(obs_data < np.percentile(post_pred, p, axis=1)) / len(obs_data)
-        actual[p] = round(percent, 4) * 100
+        actual[p] = round(percent, 2) * 100
     return actual
 
 
