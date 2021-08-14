@@ -6,16 +6,16 @@ import statsmodels.api as sm
 
 def computed_lpd(log_probs):
     """
-    Calculates log predictive density from posterior samples.
+    Calculates pointwise log predictive density from posterior samples.
     See equation 3 at https://arxiv.org/abs/1507.04544
 
     Parameters:
         log_probs: Log probabilities from model
     Returns:
-        Log predictive density
+        Log predictive density for each data point
     """
     pointwise_probs = np.mean(np.exp(log_probs), axis=1)
-    return np.sum(np.log(pointwise_probs))
+    return np.log(pointwise_probs)
 
 
 def waic(arviz_data):
@@ -28,6 +28,7 @@ def waic(arviz_data):
                     Must have a defined log_likelihood variable
     Returns:
         WAIC
+        Pointwise log predictive density.
         Pointwise effective number of parameters.
             Values above 0.4 makes validity questionable, see paper above
     """
@@ -35,13 +36,42 @@ def waic(arviz_data):
     log_probs = arviz_data.log_likelihood.stack(sample=("draw", "chain"))[
         log_probs_name
     ].values
-    lpd = computed_lpd(log_probs)
+    pointwise_lpd = computed_lpd(log_probs)
     pointwise_eff_params = np.var(log_probs, axis=1)
+    lpd = np.sum(pointwise_lpd)
     eff_params = np.sum(pointwise_eff_params)
-    return lpd - eff_params, pointwise_eff_params
+    return lpd - eff_params, pointwise_lpd, pointwise_eff_params
 
 
-# TODO: Function for differences in WAIC including standard error
+def waic_diff(model1, model2):
+    model1_waic, model1_lpd, model1_eff_params = waic(model1)
+    model2_waic, model2_lpd, model2_eff_params = waic(model2)
+
+    diff = round(model1_waic - model2_waic, 2)
+    diff_se = round(np.sqrt(len(model1_lpd) * np.var(model1_lpd - model2_lpd)), 2)
+    diff_interval = [round(diff - 2.6 * diff_se, 2), round(diff + 2.6 * diff_se, 2)]
+
+    print(f"Model 1 WAIC: {model1_waic}\nModel 2 WAIC: {model2_waic}")
+    print(
+        f"M1 - M2 Difference: {diff}\nStandard Error: {diff_se}\nDifference 99% Interval: {diff_interval[0]} | {diff_interval[1]}"
+    )
+
+    eff_param1_max = round(np.max(model1_eff_params), 2)
+    eff_param2_max = round(np.max(model2_eff_params), 2)
+
+    eff_param1_gt = round(
+        sum(model1_eff_params > 0.4) / len(model1_eff_params) * 100, 2
+    )
+    eff_param2_gt = round(
+        sum(model2_eff_params > 0.4) / len(model2_eff_params) * 100, 2
+    )
+
+    print(
+        f"Max Variance for Model 1: {eff_param1_max}\nMax Variance for Model 2: {eff_param2_max}"
+    )
+    print(
+        f"Percentage of values greater than 0.4 for Model 1: {eff_param1_gt}%\nPercentage of values greater than 0.4 for Model 2: {eff_param2_gt}%"
+    )
 
 
 def get_observed_data(arviz_data):
