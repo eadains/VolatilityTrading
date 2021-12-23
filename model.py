@@ -10,8 +10,6 @@ from scipy.stats import norm
 
 from datamodel import SPX, StockData
 
-plt.rcParams["figure.figsize"] = (15, 10)
-
 
 def bs_price(right, S, K, T, sigma, r):
     """
@@ -49,6 +47,8 @@ class ShortIronCondor:
         """
         self.chain = chain
         self.underlying_price = self.chain.iloc[0]["underprice"]
+        # For checking
+        print(f"SPX Price: {self.underlying_price}")
         self.dte = dte
         self.risk_free_rate = risk_free_rate
 
@@ -150,6 +150,8 @@ class ShortIronCondor:
 def get_returns_forecast():
     spx = SPX()
     vix_data = StockData(["^VIX"])
+    # For checking
+    print(f"Data date: {spx.prices.index[-1]}")
 
     spx_wk_prices = spx.prices.resample("W-FRI").last()
     spx_wk_returns = (np.log(spx_wk_prices) - np.log(spx_wk_prices.shift(1))).dropna()
@@ -270,12 +272,7 @@ def run_model():
     print("Returns forecast computed")
     kelly = calc_kelly(position, returns)
     print(
-        f"""Short Call strike: {position.short_call["strike"]}\n
-            Short Put strike: {position.short_put["strike"]}\n
-            Expected Premium: {position.premium}\n
-            Kelly Percent: {round(float(kelly), 4) * 100}%\n
-            Returns 95% interval: {np.percentile(returns, 5) * 100}% | {np.percentile(returns, 95) * 100}%
-        """
+        f"""Short Call strike: {position.short_call["strike"]}\nShort Put strike: {position.short_put["strike"]}\nExpected Premium: {position.premium}\nKelly Percent: {round(float(kelly), 4) * 100}%\nReturns 95% interval: {np.percentile(returns, 5) * 100}% | {np.percentile(returns, 95) * 100}%"""
     )
 
 
